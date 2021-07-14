@@ -1,0 +1,29 @@
+apiVersion: kubescheduler.config.k8s.io/v1beta1
+kind: KubeSchedulerConfiguration
+leaderElection:
+  leaderElect: true
+clientConnection:
+  kubeconfig: "REPLACE_ME_WITH_KUBE_CONFIG_PATH"
+profiles:
+- schedulerName: default-scheduler
+  plugins:
+    preFilter:
+      enabled:
+      - name: TopologyScheduling
+    filter:
+      enabled:
+      - name: TopologyScheduling
+      disabled:
+      - name: "*"
+    score:
+      enabled:
+      - name: TopologyScheduling
+      disabled:
+      - name: "*"
+    reserve:
+      enabled:
+      - name: TopologyScheduling
+  pluginConfig:
+  - name: TopologyScheduling
+    args:
+      kubeConfigPath: "REPLACE_ME_WITH_KUBE_CONFIG_PATH"

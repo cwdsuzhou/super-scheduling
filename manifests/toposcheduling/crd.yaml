@@ -1,0 +1,22 @@
+apiVersion: apiextensions.k8s.io/v1beta1
+kind: CustomResourceDefinition
+metadata:
+  name: topologyschedulingpolicies.scheduling.sigs.k8s.io
+spec:
+  conversion:
+    strategy: None
+  group: scheduling.sigs.k8s.io
+  names:
+    kind: TopologySchedulingPolicy
+    listKind: TopologySchedulingPolicyList
+    plural: topologyschedulingpolicies
+    shortNames:
+      - tsp
+      - tsps
+    singular: topologyschedulingpolicy
+  scope: Namespaced
+  version: v1alpha1
+  versions:
+    - name: v1alpha1
+      served: true
+      storage: true

@@ -1,0 +1,15 @@
+apiVersion: scheduling.sigs.k8s.io/v1alpha1
+kind: TopologySchedulingPolicy
+metadata:
+  name: policy-test
+  namespace: default
+spec:
+  deployPlacement:
+    - name: test1
+      replicas: 6
+    - name: test2
+      replicas: 3
+  labelSelector:
+    matchLabels:
+      cluster-test: "true"
+  topologyKey: cluster-test
