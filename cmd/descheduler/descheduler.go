@@ -1,5 +1,5 @@
 /*
-Copyright 2020 The Kubernetes Authors.
+Copyright 2017 The Kubernetes Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -14,19 +14,27 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package util
+package main
 
-import "fmt"
+import (
+	"fmt"
+	"os"
 
-const (
-	TopologySchedulingLabelKey = "topology-scheduling-policy.scheduling.sigs.k8s.io"
+	"k8s.io/component-base/logs"
+
+	"github.com/cwdsuzhou/super-scheduling/cmd/descheduler/app"
 )
 
-var (
-	// ErrorNotMatched means pod does not match coscheduling
-	ErrorNotMatched = fmt.Errorf("not match coscheduling")
-	// ErrorWaiting means pod number does not match the min pods required
-	ErrorWaiting = fmt.Errorf("waiting")
-	// ErrorResourceNotEnough means cluster resource is not enough, mainly used in Pre-Filter
-	ErrorResourceNotEnough = fmt.Errorf("resource not enough")
-)
+func main() {
+	out := os.Stdout
+	cmd := app.NewDeschedulerCommand(out)
+	cmd.AddCommand(app.NewVersionCommand())
+
+	logs.InitLogs()
+	defer logs.FlushLogs()
+
+	if err := cmd.Execute(); err != nil {
+		fmt.Println(err)
+		os.Exit(1)
+	}
+}

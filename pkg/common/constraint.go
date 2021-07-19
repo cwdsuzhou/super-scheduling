@@ -14,19 +14,21 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package util
+package common
 
-import "fmt"
+import "k8s.io/apimachinery/pkg/labels"
 
-const (
-	TopologySchedulingLabelKey = "topology-scheduling-policy.scheduling.sigs.k8s.io"
-)
+// TopologySchedulingConstraint is an internal version for v1.TopologySchedulingPolicy
+// and where the selector is parsed.
+// Fields are exported for comparison during testing.
+type TopologySchedulingConstraint struct {
+	TopologyKey    string
+	SchedulePolicy map[string]int32
+	Selector       labels.Selector
+}
 
-var (
-	// ErrorNotMatched means pod does not match coscheduling
-	ErrorNotMatched = fmt.Errorf("not match coscheduling")
-	// ErrorWaiting means pod number does not match the min pods required
-	ErrorWaiting = fmt.Errorf("waiting")
-	// ErrorResourceNotEnough means cluster resource is not enough, mainly used in Pre-Filter
-	ErrorResourceNotEnough = fmt.Errorf("resource not enough")
-)
+// TopologyPair stores the Key Value info
+type TopologyPair struct {
+	Key   string
+	Value string
+}

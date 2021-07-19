@@ -34,10 +34,11 @@ import (
 	"k8s.io/kubernetes/pkg/scheduler/framework/plugins/helper"
 
 	"github.com/cwdsuzhou/super-scheduling/pkg/apis/config"
-	"github.com/cwdsuzhou/super-scheduling/pkg/apis/scheduling/v1alpha1"
+	"github.com/cwdsuzhou/super-scheduling/pkg/common"
 	"github.com/cwdsuzhou/super-scheduling/pkg/generated/clientset/versioned"
 	schedinformer "github.com/cwdsuzhou/super-scheduling/pkg/generated/informers/externalversions"
 	externalv1alpha1 "github.com/cwdsuzhou/super-scheduling/pkg/generated/listers/scheduling/v1alpha1"
+	"github.com/cwdsuzhou/super-scheduling/pkg/util"
 )
 
 const (
@@ -45,8 +46,6 @@ const (
 	ErrReasonConstraintsNotMatch = "node(s) didn't match pod topology spread constraints"
 	// ErrReasonNodeLabelNotMatch is used when the node doesn't hold the required label.
 	ErrReasonNodeLabelNotMatch = ErrReasonConstraintsNotMatch + " (missing required label)"
-
-	topologySchedulingLabelKey = "topology-scheduling-policy.scheduling.sigs.k8s.io"
 )
 
 // TopologyScheduling is a plugin that implements the mechanism of capacity scheduling.
@@ -56,25 +55,11 @@ type TopologyScheduling struct {
 	topologyPolicyLister externalv1alpha1.TopologySchedulingPolicyLister
 }
 
-type topologyPair struct {
-	key   string
-	value string
-}
-
-// topologySchedulingConstraint is an internal version for v1.TopologySpreadConstraint
-// and where the selector is parsed.
-// Fields are exported for comparison during testing.
-type topologySchedulingConstraint struct {
-	TopologyKey    string
-	SchedulePolicy map[string]int32
-	Selector       labels.Selector
-}
-
 // PreFilterState computed at PreFilter and used at PostFilter or Reserve.
 type PreFilterState struct {
-	Constraint topologySchedulingConstraint
-	// TpPairToMatchNum is keyed with topologyPair, and valued with the number of matching pods.
-	TpPairToMatchNum map[topologyPair]*int32
+	Constraint common.TopologySchedulingConstraint
+	// TpPairToMatchNum is keyed with TopologyPair, and valued with the number of matching pods.
+	TpPairToMatchNum map[common.TopologyPair]*int32
 }
 
 func (s *PreFilterState) updateWithPod(updatedPod, preemptorPod *v1.Pod, node *v1.Node, delta int32) {
@@ -91,7 +76,7 @@ func (s *PreFilterState) updateWithPod(updatedPod, preemptorPod *v1.Pod, node *v
 	}
 
 	k, v := s.Constraint.TopologyKey, node.Labels[s.Constraint.TopologyKey]
-	pair := topologyPair{key: k, value: v}
+	pair := common.TopologyPair{Key: k, Value: v}
 	*s.TpPairToMatchNum[pair] += delta
 }
 
@@ -103,10 +88,10 @@ func (s *PreFilterState) Clone() framework.StateData {
 	stateCopy := PreFilterState{
 		// Constraints are shared because they don't change.
 		Constraint:       s.Constraint,
-		TpPairToMatchNum: make(map[topologyPair]*int32, len(s.TpPairToMatchNum)),
+		TpPairToMatchNum: make(map[common.TopologyPair]*int32, len(s.TpPairToMatchNum)),
 	}
 	for tpPair, matchNum := range s.TpPairToMatchNum {
-		copyPair := topologyPair{key: tpPair.key, value: tpPair.value}
+		copyPair := common.TopologyPair{Key: tpPair.Key, Value: tpPair.Value}
 		copyCount := *matchNum
 		stateCopy.TpPairToMatchNum[copyPair] = &copyCount
 	}
@@ -198,7 +183,7 @@ func getPreFilterState(cycleState *framework.CycleState) (*PreFilterState, error
 }
 
 func (ts *TopologyScheduling) calculatePreFilterStateCache(pod *v1.Pod) (*PreFilterState, error) {
-	policyName, ok := pod.Labels[topologySchedulingLabelKey]
+	policyName, ok := pod.Labels[util.TopologySchedulingLabelKey]
 	if !ok {
 		return nil, nil
 	}
@@ -232,20 +217,20 @@ func (ts *TopologyScheduling) calculatePreFilterStateCache(pod *v1.Pod) (*PreFil
 	if err != nil {
 		return nil, err
 	}
-	constraint := topologySchedulingConstraint{
+	constraint := common.TopologySchedulingConstraint{
 		TopologyKey:    tsp.Spec.TopologyKey,
-		SchedulePolicy: covertPolicy(tsp.Spec.DeployPlacement),
+		SchedulePolicy: util.CovertPolicy(tsp.Spec.DeployPlacement),
 		Selector:       selector,
 	}
 	s := PreFilterState{
 		Constraint:       constraint,
-		TpPairToMatchNum: make(map[topologyPair]*int32),
+		TpPairToMatchNum: make(map[common.TopologyPair]*int32),
 	}
 	processNode := func(i int) {
 		nodeInfo := allNodes[i]
 		node := nodeInfo.Node()
 
-		pair := topologyPair{key: tsp.Spec.TopologyKey, value: node.Labels[tsp.Spec.TopologyKey]}
+		pair := common.TopologyPair{Key: tsp.Spec.TopologyKey, Value: node.Labels[tsp.Spec.TopologyKey]}
 		tpCount := s.TpPairToMatchNum[pair]
 		if tpCount == nil {
 			return
@@ -269,7 +254,7 @@ func (ts *TopologyScheduling) Filter(ctx context.Context, state *framework.Cycle
 		return framework.AsStatus(err)
 	}
 
-	policyName, ok := pod.Labels[topologySchedulingLabelKey]
+	policyName, ok := pod.Labels[util.TopologySchedulingLabelKey]
 	if !ok {
 		return nil
 	}
@@ -348,9 +333,9 @@ func (ts *TopologyScheduling) Score(ctx context.Context, state *framework.CycleS
 	if !ok {
 		return 0, framework.NewStatus(framework.Success, "")
 	}
-	pair := topologyPair{
-		key:   s.Constraint.TopologyKey,
-		value: tpval,
+	pair := common.TopologyPair{
+		Key:   s.Constraint.TopologyKey,
+		Value: tpval,
 	}
 	desired, ok := s.Constraint.SchedulePolicy[tpval]
 	if !ok {
@@ -420,20 +405,12 @@ func countPodsMatchSelector(podInfos []*framework.PodInfo, selector labels.Selec
 	return count
 }
 
-func covertPolicy(dp []v1alpha1.SchedulePolicy) map[string]int32 {
-	policy := make(map[string]int32)
-	for _, p := range dp {
-		policy[p.Name] = p.Replicas
-	}
-	return policy
-}
-
 func checkPolicyRequirementReached(topoKey string, policy map[string]int32,
-	tpPairToMatchNum map[topologyPair]*int32) bool {
+	tpPairToMatchNum map[common.TopologyPair]*int32) bool {
 	for value, replicas := range policy {
-		pair := topologyPair{
-			key:   topoKey,
-			value: value,
+		pair := common.TopologyPair{
+			Key:   topoKey,
+			Value: value,
 		}
 		count, ok := tpPairToMatchNum[pair]
 		if count == nil || !ok {
@@ -447,10 +424,10 @@ func checkPolicyRequirementReached(topoKey string, policy map[string]int32,
 }
 
 func checkTopoValueReached(topoKey, topoValue string, policy map[string]int32,
-	tpPairToMatchNum map[topologyPair]*int32) bool {
-	pair := topologyPair{
-		key:   topoKey,
-		value: topoValue,
+	tpPairToMatchNum map[common.TopologyPair]*int32) bool {
+	pair := common.TopologyPair{
+		Key:   topoKey,
+		Value: topoValue,
 	}
 	desired, ok := policy[topoValue]
 	if !ok {

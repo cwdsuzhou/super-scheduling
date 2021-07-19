@@ -4,6 +4,8 @@ go 1.15
 
 require (
 	github.com/prometheus/client_golang v1.9.0 // indirect
+	github.com/spf13/cobra v1.1.1
+	github.com/spf13/pflag v1.0.5
 	k8s.io/api v0.20.5
 	k8s.io/apimachinery v0.20.5
 	k8s.io/client-go v0.20.5
@@ -13,6 +15,7 @@ require (
 	k8s.io/kube-openapi v0.0.0-20201113171705-d219536bb9fd
 	k8s.io/kube-scheduler v0.20.5
 	k8s.io/kubernetes v1.20.5
+	sigs.k8s.io/descheduler v0.20.0
 )
 
 replace (
@@ -41,4 +44,5 @@ replace (
 	k8s.io/metrics => k8s.io/metrics v0.20.5
 	k8s.io/mount-utils => k8s.io/mount-utils v0.20.5
 	k8s.io/sample-apiserver => k8s.io/sample-apiserver v0.20.5
+	sigs.k8s.io/descheduler => sigs.k8s.io/descheduler v0.20.0
 )

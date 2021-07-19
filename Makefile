@@ -25,6 +25,7 @@ LOCAL_IMAGE=kube-scheduler:latest
 RELEASE_REGISTRY?=gcr.io/k8s-staging-scheduler-plugins
 RELEASE_VERSION?=v$(shell date +%Y%m%d)-$(shell git describe --tags --match "v*")
 RELEASE_IMAGE:=kube-scheduler:$(RELEASE_VERSION)
+RELEASE_DESCHEDULER_IMAGE:=descheduler:$(RELEASE_VERSION)
 
 # VERSION is the scheduler's version
 #
@@ -45,48 +46,57 @@ build.amd64: build-scheduler.amd64
 .PHONY: build.arm64v8
 build.arm64v8: build-scheduler.arm64v8
 
-.PHONY: build-scheduler
+.PHONY: build-scheduler build-descheduler
 build-scheduler: autogen
 	$(COMMONENVVAR) $(BUILDENVVAR) go build -ldflags '-X k8s.io/component-base/version.gitVersion=$(VERSION) -w' -o bin/kube-scheduler cmd/scheduler/main.go
 
-.PHONY: build-scheduler.amd64
+build-descheduler: autogen
+	$(COMMONENVVAR) $(BUILDENVVAR) go build -ldflags '-X k8s.io/component-base/version.gitVersion=$(VERSION) -w' -o bin/descheduler cmd/descheduler/descheduler.go
+
+.PHONY: build-scheduler.amd64 build-descheduler.amd64
 build-scheduler.amd64: autogen
 	$(COMMONENVVAR) $(BUILDENVVAR) GOARCH=amd64 go build -ldflags '-X k8s.io/component-base/version.gitVersion=$(VERSION) -w' -o bin/kube-scheduler cmd/scheduler/main.go
 
-.PHONY: build-scheduler.arm64v8
+build-descheduler.amd64: autogen
+	$(COMMONENVVAR) $(BUILDENVVAR) GOARCH=amd64 go build -ldflags '-X k8s.io/component-base/version.gitVersion=$(VERSION) -w' -o bin/descheduler cmd/descheduler/descheduler.go
+
+.PHONY: build-scheduler.arm64v8 build-descheduler.arm64v8
 build-scheduler.arm64v8: autogen
 	GOOS=linux $(BUILDENVVAR) GOARCH=arm64 go build -ldflags '-X k8s.io/component-base/version.gitVersion=$(VERSION) -w' -o bin/kube-scheduler cmd/scheduler/main.go
+
+build-descheduler.arm64v8: autogen
+	GOOS=linux $(BUILDENVVAR) GOARCH=arm64 go build -ldflags '-X k8s.io/component-base/version.gitVersion=$(VERSION) -w' -o bin/descheduler cmd/descheduler/descheduler.go
 
 .PHONY: local-image
 local-image: clean
 	docker build -f ./build/scheduler/Dockerfile --build-arg ARCH="amd64" --build-arg RELEASE_VERSION="$(RELEASE_VERSION)" -t $(LOCAL_REGISTRY)/$(LOCAL_IMAGE) .
-	docker build -f ./build/controller/Dockerfile --build-arg ARCH="amd64" -t $(LOCAL_REGISTRY)/$(LOCAL_CONTROLLER_IMAGE) .
+	docker build -f ./build/descheduler/Dockerfile --build-arg ARCH="amd64" -t $(LOCAL_REGISTRY)/$(RELEASE_DESCHEDULER_IMAGE) .
 
 .PHONY: release-image.amd64
 release-image.amd64: clean
 	docker build -f ./build/scheduler/Dockerfile --build-arg ARCH="amd64" --build-arg RELEASE_VERSION="$(RELEASE_VERSION)" -t $(RELEASE_REGISTRY)/$(RELEASE_IMAGE)-amd64 .
-	docker build -f ./build/controller/Dockerfile --build-arg ARCH="amd64" -t $(RELEASE_REGISTRY)/$(RELEASE_CONTROLLER_IMAGE)-amd64 .
+	docker build -f ./build/descheduler/Dockerfile --build-arg ARCH="amd64" -t $(RELEASE_REGISTRY)/$(RELEASE_DESCHEDULER_IMAGE)-amd64 .
 
 .PHONY: release-image.arm64v8
 release-image.arm64v8: clean
 	docker build -f ./build/scheduler/Dockerfile --build-arg ARCH="arm64v8" --build-arg RELEASE_VERSION="$(RELEASE_VERSION)" -t $(RELEASE_REGISTRY)/$(RELEASE_IMAGE)-arm64 .
-	docker build -f ./build/controller/Dockerfile --build-arg ARCH="arm64v8" -t $(RELEASE_REGISTRY)/$(RELEASE_CONTROLLER_IMAGE)-arm64 .
+	docker build -f ./build/descheduler/Dockerfile --build-arg ARCH="arm64v8" -t $(RELEASE_REGISTRY)/$(RELEASE_DESCHEDULER_IMAGE)-arm64 .
 
 .PHONY: push-release-images
 push-release-images: release-image.amd64 release-image.arm64v8
 	gcloud auth configure-docker
 	for arch in $(ARCHS); do \
 		docker push $(RELEASE_REGISTRY)/$(RELEASE_IMAGE)-$${arch} ;\
-		docker push $(RELEASE_REGISTRY)/$(RELEASE_CONTROLLER_IMAGE)-$${arch} ;\
+		docker push $(RELEASE_REGISTRY)/$(RELEASE_DESCHEDULER_IMAGE)-$${arch} ;\
 	done
 	DOCKER_CLI_EXPERIMENTAL=enabled docker manifest create $(RELEASE_REGISTRY)/$(RELEASE_IMAGE) $(addprefix --amend $(RELEASE_REGISTRY)/$(RELEASE_IMAGE)-, $(ARCHS))
-	DOCKER_CLI_EXPERIMENTAL=enabled docker manifest create $(RELEASE_REGISTRY)/$(RELEASE_CONTROLLER_IMAGE) $(addprefix --amend $(RELEASE_REGISTRY)/$(RELEASE_CONTROLLER_IMAGE)-, $(ARCHS))
+	DOCKER_CLI_EXPERIMENTAL=enabled docker manifest create $(RELEASE_REGISTRY)/$(RELEASE_DESCHEDULER_IMAGE) $(addprefix --amend $(RELEASE_REGISTRY)/$(RELEASE_DESCHEDULER_IMAGE)-, $(ARCHS))
 	for arch in $(ARCHS); do \
 		DOCKER_CLI_EXPERIMENTAL=enabled docker manifest annotate --arch $${arch} $(RELEASE_REGISTRY)/$(RELEASE_IMAGE) $(RELEASE_REGISTRY)/$(RELEASE_IMAGE)-$${arch} ;\
-		DOCKER_CLI_EXPERIMENTAL=enabled docker manifest annotate --arch $${arch} $(RELEASE_REGISTRY)/$(RELEASE_CONTROLLER_IMAGE) $(RELEASE_REGISTRY)/$(RELEASE_CONTROLLER_IMAGE)-$${arch} ;\
+		DOCKER_CLI_EXPERIMENTAL=enabled docker manifest annotate --arch $${arch} $(RELEASE_REGISTRY)/$(RELEASE_DESCHEDULER_IMAGE) $(RELEASE_REGISTRY)/$(RELEASE_DESCHEDULER_IMAGE)-$${arch} ;\
 	done
 	DOCKER_CLI_EXPERIMENTAL=enabled docker manifest push $(RELEASE_REGISTRY)/$(RELEASE_IMAGE) ;\
-	DOCKER_CLI_EXPERIMENTAL=enabled docker manifest push $(RELEASE_REGISTRY)/$(RELEASE_CONTROLLER_IMAGE) ;\
+	DOCKER_CLI_EXPERIMENTAL=enabled docker manifest push $(RELEASE_REGISTRY)/$(RELEASE_DESCHEDULER_IMAGE) ;\
 
 .PHONY: update-vendor
 update-vendor:
