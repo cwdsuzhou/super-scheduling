@@ -345,7 +345,7 @@ func (ts *TopologyScheduling) Score(ctx context.Context, state *framework.CycleS
 	if count == nil || !ok {
 		return 0, framework.NewStatus(framework.Success, "")
 	}
-	if *count < desired {
+	if desired >= *count {
 		return 0, framework.NewStatus(framework.Success, "")
 	}
 	return int64(float64(desired)/float64(*count+1-desired))*1000 + int64(desired),
