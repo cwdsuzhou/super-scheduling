@@ -71,13 +71,16 @@ func RemovePodsViolatingTopologySchedulingPolicy(
 		}
 		TpPairToMatchNum := make(map[common.TopologyPair]*TopoPairCount)
 		pods, err := client.CoreV1().Pods(tsp.Namespace).List(ctx, metav1.ListOptions{
-			LabelSelector: tsp.Spec.LabelSelector.String(),
+			LabelSelector: metav1.FormatLabelSelector(tsp.Spec.LabelSelector),
 		})
 		if err != nil {
 			klog.Error(err)
 			continue
 		}
 		for _, pod := range pods.Items {
+			if pod.DeletionTimestamp != nil {
+				continue
+			}
 			node := nodeMap[pod.Spec.NodeName]
 			if node == nil {
 				continue
@@ -95,6 +98,9 @@ func RemovePodsViolatingTopologySchedulingPolicy(
 				counter.pods = append(counter.pods, &pod)
 			}
 		}
+		if checkTopoReached(TpPairToMatchNum, constraint) {
+			continue
+		}
 		for pair, counter := range TpPairToMatchNum {
 			diff := constraint.SchedulePolicy[pair.Value] - counter.count
 			if diff >= 0 {
@@ -109,6 +115,28 @@ func RemovePodsViolatingTopologySchedulingPolicy(
 			}
 		}
 	}
+}
+
+func checkTopoReached(pair map[common.TopologyPair]*TopoPairCount,
+	constraint common.TopologySchedulingConstraint) bool {
+	satisfied := true
+	notSatisfied := false
+	for pair, counter := range pair {
+		diff := constraint.SchedulePolicy[pair.Value] - counter.count
+		if diff > 0 {
+			notSatisfied = true
+			continue
+		} else if diff < 0 {
+			satisfied = true
+		}
+	}
+	// some keys exceed, some keys not exceed => not reached
+	// all keys exceed => reached
+	// all key not exceed => not reached
+	if satisfied && !notSatisfied {
+		return true
+	}
+	return false
 }
 
 type ByCostom []*v1.Pod
