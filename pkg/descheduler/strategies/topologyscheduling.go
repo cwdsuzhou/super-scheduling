@@ -77,7 +77,8 @@ func RemovePodsViolatingTopologySchedulingPolicy(
 			klog.Error(err)
 			continue
 		}
-		for _, pod := range pods.Items {
+		for _, p := range pods.Items {
+			pod := p.DeepCopy()
 			if pod.DeletionTimestamp != nil {
 				continue
 			}
@@ -90,12 +91,12 @@ func RemovePodsViolatingTopologySchedulingPolicy(
 			if counter == nil {
 				counter = &TopoPairCount{
 					count: 1,
-					pods:  []*v1.Pod{&pod},
+					pods:  []*v1.Pod{pod},
 				}
 				TpPairToMatchNum[pair] = counter
 			} else {
 				counter.count++
-				counter.pods = append(counter.pods, &pod)
+				counter.pods = append(counter.pods, pod)
 			}
 		}
 		if checkTopoReached(TpPairToMatchNum, constraint) {
