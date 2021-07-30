@@ -65,7 +65,7 @@ leaderElection:
 clientConnection:
   kubeconfig: "REPLACE_ME_WITH_KUBE_CONFIG_PATH"
 profiles:
-  - schedulerName: default-scheduler
+  - schedulerName: default-mcscheduling
     plugins:
       preFilter:
         enabled:

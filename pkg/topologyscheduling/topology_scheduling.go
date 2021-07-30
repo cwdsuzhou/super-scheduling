@@ -32,6 +32,7 @@ import (
 	"k8s.io/klog/v2"
 	"k8s.io/kubernetes/pkg/scheduler/framework"
 	"k8s.io/kubernetes/pkg/scheduler/framework/plugins/helper"
+	frameworkruntime "k8s.io/kubernetes/pkg/scheduler/framework/runtime"
 
 	"github.com/cwdsuzhou/super-scheduling/pkg/apis/config"
 	"github.com/cwdsuzhou/super-scheduling/pkg/common"
@@ -122,18 +123,17 @@ func (ts *TopologyScheduling) Name() string {
 
 // New initializes a new plugin and returns it.
 func New(obj runtime.Object, handle framework.Handle) (framework.Plugin, error) {
-	args, ok := obj.(*config.SchedulingArgs)
-	if !ok {
-		return nil, fmt.Errorf("want args to be of type CapacitySchedulingArgs, got %T", obj)
+	var args config.SchedulingArgs
+	err := frameworkruntime.DecodeInto(obj, &args)
+	if err != nil {
+		return nil, fmt.Errorf("want args to be of type SchedulingArgs, got %T\n", obj)
 	}
-	kubeConfigPath := args.KubeConfigPath
-
 	c := &TopologyScheduling{
 		frameworkHandle: handle,
 		podLister:       handle.SharedInformerFactory().Core().V1().Pods().Lister(),
 	}
 
-	restConfig, err := clientcmd.BuildConfigFromFlags("", kubeConfigPath)
+	restConfig, err := clientcmd.BuildConfigFromFlags(args.KubeMaster, args.KubeConfigPath)
 	if err != nil {
 		return nil, err
 	}
@@ -159,6 +159,9 @@ func New(obj runtime.Object, handle framework.Handle) (framework.Plugin, error) 
 // 2. Check if the sum(eq's usage) > sum(eq's min).
 func (ts *TopologyScheduling) PreFilter(ctx context.Context, state *framework.CycleState,
 	pod *v1.Pod) *framework.Status {
+	if !podRequireTopologyScheduling(pod) {
+		return nil
+	}
 	s, err := ts.calculatePreFilterStateCache(pod)
 	if err != nil {
 		return framework.AsStatus(err)
@@ -196,23 +199,6 @@ func (ts *TopologyScheduling) calculatePreFilterStateCache(pod *v1.Pod) (*PreFil
 	if err != nil {
 		return nil, fmt.Errorf("listing NodeInfos: %w", err)
 	}
-	for _, n := range allNodes {
-		node := n.Node()
-		if node == nil {
-			klog.Error("node not found")
-			continue
-		}
-		// In accordance to design, if NodeAffinity or NodeSelector is defined,
-		// spreading is applied to nodes that pass those filters.
-		if !helper.PodMatchesNodeSelectorAndAffinityTerms(pod, node) {
-			continue
-		}
-		// check node labels
-		if _, ok := node.Labels[tsp.Spec.TopologyKey]; !ok {
-			continue
-		}
-		continue
-	}
 	selector, err := metav1.LabelSelectorAsSelector(tsp.Spec.LabelSelector)
 	if err != nil {
 		return nil, err
@@ -226,6 +212,26 @@ func (ts *TopologyScheduling) calculatePreFilterStateCache(pod *v1.Pod) (*PreFil
 		Constraint:       constraint,
 		TpPairToMatchNum: make(map[common.TopologyPair]*int32),
 	}
+	for _, n := range allNodes {
+		node := n.Node()
+		if node == nil {
+			klog.Error("node not found")
+			continue
+		}
+		// In accordance to design, if NodeAffinity or NodeSelector is defined,
+		// spreading is applied to nodes that pass those filters.
+		if !helper.PodMatchesNodeSelectorAndAffinityTerms(pod, node) {
+			continue
+		}
+		// check node labels
+		tpval, ok := node.Labels[tsp.Spec.TopologyKey]
+		if !ok {
+			continue
+		}
+		pair := common.TopologyPair{Key: tsp.Spec.TopologyKey, Value: tpval}
+		s.TpPairToMatchNum[pair] = new(int32)
+	}
+
 	processNode := func(i int) {
 		nodeInfo := allNodes[i]
 		node := nodeInfo.Node()
@@ -244,6 +250,9 @@ func (ts *TopologyScheduling) calculatePreFilterStateCache(pod *v1.Pod) (*PreFil
 
 func (ts *TopologyScheduling) Filter(ctx context.Context, state *framework.CycleState, pod *v1.Pod,
 	nodeInfo *framework.NodeInfo) *framework.Status {
+	if !podRequireTopologyScheduling(pod) {
+		return nil
+	}
 	node := nodeInfo.Node()
 	if node == nil {
 		return framework.AsStatus(fmt.Errorf("node not found"))
@@ -295,6 +304,9 @@ func (ts *TopologyScheduling) PreFilterExtensions() framework.PreFilterExtension
 // AddPod from pre-computed data in cycleState.
 func (ts *TopologyScheduling) AddPod(ctx context.Context, cycleState *framework.CycleState, podToSchedule *v1.Pod,
 	podToAdd *v1.Pod, nodeInfo *framework.NodeInfo) *framework.Status {
+	if !podRequireTopologyScheduling(podToSchedule) {
+		return framework.NewStatus(framework.Success, "")
+	}
 	s, err := getPreFilterState(cycleState)
 	if err != nil {
 		return framework.AsStatus(err)
@@ -308,6 +320,9 @@ func (ts *TopologyScheduling) AddPod(ctx context.Context, cycleState *framework.
 // RemovePod from pre-computed data in cycleState.
 func (ts *TopologyScheduling) RemovePod(ctx context.Context, cycleState *framework.CycleState, podToSchedule *v1.Pod,
 	podToRemove *v1.Pod, nodeInfo *framework.NodeInfo) *framework.Status {
+	if !podRequireTopologyScheduling(podToSchedule) {
+		return framework.NewStatus(framework.Success, "")
+	}
 	s, err := getPreFilterState(cycleState)
 	if err != nil {
 		return framework.AsStatus(err)
@@ -318,14 +333,21 @@ func (ts *TopologyScheduling) RemovePod(ctx context.Context, cycleState *framewo
 	return framework.NewStatus(framework.Success, "")
 }
 
-func (ts *TopologyScheduling) Score(ctx context.Context, state *framework.CycleState, p *v1.Pod,
+func (ts *TopologyScheduling) Score(ctx context.Context, state *framework.CycleState, pod *v1.Pod,
 	nodeName string) (int64, *framework.Status) {
+	if !podRequireTopologyScheduling(pod) {
+		return 0, framework.NewStatus(framework.Success, "")
+	}
 	s, err := getPreFilterState(state)
+	if s == nil {
+		klog.Info("xxxxxx state nil")
+		return 0, framework.NewStatus(framework.Success, "")
+	}
 	if err != nil {
 		return 0, framework.NewStatus(framework.Success, "")
 	}
 	node, err := ts.frameworkHandle.SnapshotSharedLister().NodeInfos().Get(nodeName)
-	if err != nil {
+	if err != nil || node == nil || node.Node() == nil {
 		return 0, framework.NewStatus(framework.Error, "node not exist")
 	}
 	// check node labels
@@ -363,6 +385,9 @@ func (ts *TopologyScheduling) NormalizeScore(ctx context.Context, state *framewo
 
 func (ts *TopologyScheduling) Reserve(ctx context.Context, state *framework.CycleState, pod *v1.Pod,
 	nodeName string) *framework.Status {
+	if !podRequireTopologyScheduling(pod) {
+		return framework.NewStatus(framework.Success, "")
+	}
 	s, err := getPreFilterState(state)
 	if err != nil {
 		return framework.AsStatus(err)
@@ -376,6 +401,9 @@ func (ts *TopologyScheduling) Reserve(ctx context.Context, state *framework.Cycl
 }
 
 func (ts *TopologyScheduling) Unreserve(ctx context.Context, state *framework.CycleState, pod *v1.Pod, nodeName string) {
+	if !podRequireTopologyScheduling(pod) {
+		return
+	}
 	s, err := getPreFilterState(state)
 	if err != nil {
 		return
@@ -438,6 +466,14 @@ func checkTopoValueReached(topoKey, topoValue string, policy map[string]int32,
 		return false
 	}
 	if *count < desired {
+		return false
+	}
+	return true
+}
+
+func podRequireTopologyScheduling(pod *v1.Pod) bool {
+	_, ok := pod.Labels[util.TopologySchedulingLabelKey]
+	if !ok {
 		return false
 	}
 	return true
