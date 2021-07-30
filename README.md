@@ -65,7 +65,7 @@ leaderElection:
 clientConnection:
   kubeconfig: "REPLACE_ME_WITH_KUBE_CONFIG_PATH"
 profiles:
-  - schedulerName: default-mcscheduling
+  - schedulerName: default-multicluster
     plugins:
       preFilter:
         enabled:
@@ -88,13 +88,118 @@ profiles:
         args:
           kubeConfigPath: "REPLACE_ME_WITH_KUBE_CONFIG_PATH"
 ```
+> If you want to enable multi-cluster, enable the MultiClusterScheduling in the config, as follow:
+```
+      filter:
+        enabled:
+          - name: MultiClusterScheduling
+```
 
 *3* deploy descheduler
 
 descheduler should be deployed as deployment in cluster
 
 ```yaml
-
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: descheduler-policy-configmap
+  namespace: kube-system
+data:
+  policy.yaml: |
+    apiVersion: "descheduler/v1alpha1"
+    kind: "DeschedulerPolicy"
+    strategies:
+      RemovePodsViolatingTopologySchedulingPolicy:
+        enabled: true
+---
+kind: ClusterRole
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: descheduler-cluster-role
+  namespace: kube-system
+rules:
+- apiGroups: [""]
+  resources: ["events"]
+  verbs: ["create", "update"]
+- apiGroups: [""]
+  resources: ["nodes"]
+  verbs: ["get", "watch", "list"]
+- apiGroups: [""]
+  resources: ["pods"]
+  verbs: ["create", "get", "watch", "list", "delete", "patch"]
+- apiGroups: [""]
+  resources: ["pods/eviction"]
+  verbs: ["create"]
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: descheduler-sa
+  namespace: kube-system
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: descheduler-cluster-role-binding
+  namespace: kube-system
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: descheduler-cluster-role
+subjects:
+  - name: descheduler-sa
+    kind: ServiceAccount
+    namespace: kube-system
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: descheduler
+  namespace: kube-system
+spec:
+  selector:
+    matchLabels:
+      app: descheduler
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: descheduler
+    spec:
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: type
+                operator: NotIn
+                values:
+                - virtual-kubelet
+      tolerations:
+      - effect: NoSchedule
+        key: role
+        value: not-vk
+        operator: Equal
+      priorityClassName: system-cluster-critical
+      containers:
+      - name: descheduler
+        image: ${you image}
+        volumeMounts:
+        - mountPath: /policy-dir
+          name: policy-volume
+        command:
+        - "/bin/descheduler"
+        args:
+        - "--policy-config-file=/policy-dir/policy.yaml"
+        - "--v=3"
+      restartPolicy: "Always"
+      serviceAccountName: descheduler-sa
+      volumes:
+      - name: policy-volume
+        configMap:
+          name: descheduler-policy-configmap
 ```
 
 ## Use Case

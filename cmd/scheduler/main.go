@@ -24,7 +24,7 @@ import (
 	"k8s.io/component-base/logs"
 	"k8s.io/kubernetes/cmd/kube-scheduler/app"
 
-	"github.com/cwdsuzhou/super-scheduling/pkg/mcscheduling/multischeduler"
+	"github.com/cwdsuzhou/super-scheduling/pkg/multicluster/scheduler"
 	"github.com/cwdsuzhou/super-scheduling/pkg/topologyscheduling"
 	// Ensure scheme package is initialized.
 	_ "github.com/cwdsuzhou/super-scheduling/pkg/apis/config/scheme"
@@ -33,12 +33,12 @@ import (
 func main() {
 	rand.Seed(time.Now().UnixNano())
 
-	// Register custom plugins to the mcscheduling framework.
-	// Later they can consist of mcscheduling profile(s) and hence
+	// Register custom plugins to the multicluster framework.
+	// Later they can consist of multicluster profile(s) and hence
 	// used by various kinds of workloads.
 	command := app.NewSchedulerCommand(
 		app.WithPlugin(topologyscheduling.Name, topologyscheduling.New),
-		app.WithPlugin(multischeduler.Name, multischeduler.New),
+		app.WithPlugin(scheduler.Name, scheduler.New),
 	)
 
 	// TODO: once we switch everything over to Cobra commands, we can go back to calling

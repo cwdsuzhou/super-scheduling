@@ -5,7 +5,7 @@ leaderElection:
 clientConnection:
   kubeconfig: "REPLACE_ME_WITH_KUBE_CONFIG_PATH"
 profiles:
-- schedulerName: default-mcscheduling
+- schedulerName: default-multicluster
   plugins:
     preFilter:
       enabled:
@@ -13,6 +13,7 @@ profiles:
     filter:
       enabled:
       - name: TopologyScheduling
+      - name: MultiClusterScheduling
       disabled:
       - name: "*"
     score:

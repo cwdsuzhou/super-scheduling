@@ -66,10 +66,10 @@ const (
 type UnsatisfiableConstraintAction string
 
 const (
-	// DoNotSchedule instructs the mcscheduling not to schedule the pod
+	// DoNotSchedule instructs the multicluster not to schedule the pod
 	// when constraints are not satisfied.
 	DoNotSchedule UnsatisfiableConstraintAction = "DoNotSchedule"
-	// ScheduleAnyway instructs the mcscheduling to schedule the pod
+	// ScheduleAnyway instructs the multicluster to schedule the pod
 	// even if constraints are not satisfied.
 	ScheduleAnyway UnsatisfiableConstraintAction = "ScheduleAnyway"
 )

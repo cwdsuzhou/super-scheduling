@@ -28,4 +28,20 @@ type SchedulingArgs struct {
 
 	// KubeConfigPath is the path of kubeconfig.
 	KubeConfigPath string
+
+	// KubeMaster is the url of kubernetes master.
+	KubeMaster string
+
+	// ClusterConfiguration is a key-value map to store configuration
+	ClusterConfiguration map[string]Configuration
+}
+
+// Configuration defines the lower cluster configuration
+type Configuration struct {
+	// clusterName
+	Name string
+	// Master URL
+	KubeMaster string
+	// KubeConfig of the cluster
+	KubeConfig string
 }

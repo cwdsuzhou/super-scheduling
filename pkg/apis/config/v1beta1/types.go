@@ -28,4 +28,20 @@ type SchedulingArgs struct {
 
 	// KubeConfigPath is the path of kubeconfig.
 	KubeConfigPath *string `json:"kubeConfigPath,omitempty"`
+
+	// KubeMaster is the url of kubernetes master.
+	KubeMaster *string `json:"kubeMaster,omitempty"`
+
+	// ClusterConfiguration is a key-value map to store configuration
+	ClusterConfiguration map[string]Configuration `json:"clusterConfiguration"`
+}
+
+// Configuration defines the lower cluster configuration
+type Configuration struct {
+	// clusterName
+	Name *string `json:"name"`
+	// Master URL
+	KubeMaster *string `json:"kubeMaster,omitempty"`
+	// KubeConfig of the cluster
+	KubeConfig *string `json:"kubeConfig,omitempty"`
 }

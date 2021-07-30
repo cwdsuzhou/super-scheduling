@@ -27,7 +27,7 @@ RELEASE_VERSION?=v$(shell date +%Y%m%d)-$(shell git describe --tags --match "v*"
 RELEASE_IMAGE:=kube-scheduler:$(RELEASE_VERSION)
 RELEASE_DESCHEDULER_IMAGE:=descheduler:$(RELEASE_VERSION)
 
-# VERSION is the mcscheduling's version
+# VERSION is the multicluster's version
 #
 # The RELEASE_VERSION variable can have one of two formats:
 # v20201009-v0.18.800-46-g939c1c0 - automated build for a commit(not a tag) and also a local build
