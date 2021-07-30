@@ -340,7 +340,6 @@ func (ts *TopologyScheduling) Score(ctx context.Context, state *framework.CycleS
 	}
 	s, err := getPreFilterState(state)
 	if s == nil {
-		klog.Info("xxxxxx state nil")
 		return 0, framework.NewStatus(framework.Success, "")
 	}
 	if err != nil {
@@ -367,10 +366,11 @@ func (ts *TopologyScheduling) Score(ctx context.Context, state *framework.CycleS
 	if count == nil || !ok {
 		return 0, framework.NewStatus(framework.Success, "")
 	}
-	if desired >= *count {
+	// when count >= desired, return directly
+	if *count >= desired {
 		return 0, framework.NewStatus(framework.Success, "")
 	}
-	return int64(float64(desired)/float64(*count+1-desired))*1000 + int64(desired),
+	return int64(1 - float64(*count)/float64(desired)*100),
 		framework.NewStatus(framework.Success, "")
 }
 
