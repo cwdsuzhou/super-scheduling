@@ -42,10 +42,22 @@ type TopologySchedulingPolicy struct {
 }
 
 type TopologySchedulingPolicySpec struct {
-	TopologyKey      string           `json:"topologyKey"`
-	ScheduleStrategy string           `json:"scheduleStrategy"`
-	DeployPlacement  []SchedulePolicy `json:"deployPlacement"`
-	UpdatePlacement  []UpdatePolicy   `json:"updatePlacement"`
+	// TopologyKey is used when match node topoKey
+	TopologyKey string `json:"topologyKey"`
+
+	// ScheduleStrategy is used when schedule pods for a topoKey.
+	// It can be Fill or Balance.
+	// Fill will schedule pods to satisfy a topo requirements first, then start another.
+	// Balance will try to keep Balance across different topo when scheduling pods.
+	ScheduleStrategy string `json:"scheduleStrategy"`
+
+	// DeployPlacement describes the topology requirement when scheduling pods.
+	DeployPlacement []SchedulePolicy `json:"deployPlacement"`
+
+	// UpdatePlacement describes topology requirements when updating pods.
+	// Notice: This is not implemented now.
+	UpdatePlacement []UpdatePolicy `json:"updatePlacement"`
+
 	// LabelSelector is used to find matching pods.
 	// Pods that match this label selector are counted to determine the number of pods
 	// in their corresponding topology domain.
@@ -74,16 +86,22 @@ const (
 	ScheduleAnyway UnsatisfiableConstraintAction = "ScheduleAnyway"
 )
 
+// SchedulePolicy describe the topo value required replicas
 type SchedulePolicy struct {
-	Name     string `json:"name"`
-	Replicas int32  `json:"replicas"`
+	// Name is the topo value
+	Name string `json:"name"`
+
+	// Replicas is the desired the replicas for the topo value
+	Replicas int32 `json:"replicas"`
 }
 
 type UpdatePolicy struct {
 	MaxSkew        int32    `json:"maxSkew"`
+
 	UpdateSequence []string `json:"updateSequence"`
 }
 
+// TopologySchedulingPolicyStatus describe the placement results.
 type TopologySchedulingPolicyStatus struct {
 	Placement []SchedulePolicy `json:"placement"`
 }

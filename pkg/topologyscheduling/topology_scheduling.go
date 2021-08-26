@@ -35,6 +35,7 @@ import (
 	frameworkruntime "k8s.io/kubernetes/pkg/scheduler/framework/runtime"
 
 	"github.com/cwdsuzhou/super-scheduling/pkg/apis/config"
+	"github.com/cwdsuzhou/super-scheduling/pkg/apis/scheduling/v1alpha1"
 	"github.com/cwdsuzhou/super-scheduling/pkg/common"
 	"github.com/cwdsuzhou/super-scheduling/pkg/generated/clientset/versioned"
 	schedinformer "github.com/cwdsuzhou/super-scheduling/pkg/generated/informers/externalversions"
@@ -61,6 +62,8 @@ type PreFilterState struct {
 	Constraint common.TopologySchedulingConstraint
 	// TpPairToMatchNum is keyed with TopologyPair, and valued with the number of matching pods.
 	TpPairToMatchNum map[common.TopologyPair]*int32
+	// ScheduleStrategy can be Balance or Fill
+	ScheduleStrategy string
 }
 
 func (s *PreFilterState) updateWithPod(updatedPod, preemptorPod *v1.Pod, node *v1.Node, delta int32) {
@@ -87,6 +90,7 @@ func (s *PreFilterState) Clone() framework.StateData {
 		return nil
 	}
 	stateCopy := PreFilterState{
+		ScheduleStrategy: s.ScheduleStrategy,
 		// Constraints are shared because they don't change.
 		Constraint:       s.Constraint,
 		TpPairToMatchNum: make(map[common.TopologyPair]*int32, len(s.TpPairToMatchNum)),
@@ -211,6 +215,7 @@ func (ts *TopologyScheduling) calculatePreFilterStateCache(pod *v1.Pod) (*PreFil
 	s := PreFilterState{
 		Constraint:       constraint,
 		TpPairToMatchNum: make(map[common.TopologyPair]*int32),
+		ScheduleStrategy: tsp.Spec.ScheduleStrategy,
 	}
 	for _, n := range allNodes {
 		node := n.Node()
@@ -370,7 +375,7 @@ func (ts *TopologyScheduling) Score(ctx context.Context, state *framework.CycleS
 	if *count >= desired {
 		return 0, framework.NewStatus(framework.Success, "")
 	}
-	return int64(1 - float64(*count)/float64(desired)*100),
+	return score(float64(*count), float64(desired), s.ScheduleStrategy),
 		framework.NewStatus(framework.Success, "")
 }
 
@@ -477,4 +482,14 @@ func podRequireTopologyScheduling(pod *v1.Pod) bool {
 		return false
 	}
 	return true
+}
+
+func score(count, desired float64, policy string) int64 {
+	if policy == v1alpha1.ScheduleStrategyBalance {
+		return int64(1 - count/desired*100)
+	}
+	if policy == v1alpha1.ScheduleStrategyFill {
+		return int64(count / desired * 100)
+	}
+	return 0
 }
