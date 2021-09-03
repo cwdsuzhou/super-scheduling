@@ -93,7 +93,7 @@ func (m MultiSchedulingPlugin) Filter(pc context.Context, state *framework.Cycle
 		podCopy.Spec.Tolerations = nil
 	}
 
-	result, err := scheduler.Algorithm.Schedule(pc, scheduler.Profiles["default-scheduler"], state, podCopy)
+	result, err := scheduler.Algorithm.Filter(pc, scheduler.Profiles["default-scheduler"], state, podCopy)
 	klog.V(5).Infof("%v Nodes, Node %s can be scheduled to run pod", result.FeasibleNodes, result.SuggestedHost)
 	if err != nil {
 		klog.Infof("Pod selector: %+v, affinity: %+v", pod.Spec.NodeSelector, pod.Spec.Affinity)
